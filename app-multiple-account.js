@@ -4,6 +4,7 @@ const socketIO = require('socket.io');
 const qrcode = require('qrcode');
 const http = require('http');
 const fs = require('fs');
+const request = require('request');
 const { phoneNumberFormatter } = require('./helpers/formatter');
 const fileUpload = require('express-fileupload');
 const axios = require('axios');
@@ -18,19 +19,15 @@ app.use(express.urlencoded({
 	extended: true
 }));
 
-/**
- * BASED ON MANY QUESTIONS
- * Actually ready mentioned on the tutorials
- * 
- * The two middlewares above only handle for data json & urlencode (x-www-form-urlencoded)
- * So, we need to add extra middleware to handle form-data
- * Here we can use express-fileupload
- */
 app.use(fileUpload({
 	debug: false
 }));
 
 app.get('/', (req, res) => {
+
+	// const vToken = req.params;
+	// console.log('vToken : ', vToken);
+
 	res.sendFile('index-multiple-account.html', {
 		root: __dirname
 	});
@@ -69,7 +66,7 @@ const getSessionsFile = function() {
 	return JSON.parse(fs.readFileSync(SESSIONS_FILE));
 }
 
-const createSession = function(id, description) {
+const createSession = function(id, description, webhookUrl) {
 	console.log('Creating session: ' + id);
 	const client = new Client({
 		restartOnAuthFail: true,
@@ -111,13 +108,42 @@ const createSession = function(id, description) {
 		setSessionsFile(savedSessions);
 	});
 
+	// Function ketika Client Reply Message
 	client.on('message', msg => {
 		if (msg.body == '!ping') {
 			msg.reply('pong');
+		} else {
+			console.log('+=========================================+')
+			console.log('msg.id.id : ', msg.id.id)
+			console.log('msg._data.notifyName : ', msg._data.notifyName)
+			console.log('msg.fromMe : ', msg.fromMe)
+			console.log('msg.from : ', msg.from)
+			console.log('msg.to : ', msg.to)
+			console.log('msg.body : ', msg.body)
+			console.log('msg.timestamp : ', msg.timestamp)
+			console.log('msg.reply : Reply')
+			console.log('+=========================================+')
+			console.log('=============== PUSH KE WEBHOOK (REPLY) ================');
+			console.log('webhookUrl : ', webhookUrl);
+			request.post({
+				url:     webhookUrl,
+				body : {
+					id 			: msg.id.id,
+					pushName 	: msg._data.notifyName, 
+					fromMe 		: msg.fromMe,
+					from 		: msg.from,
+					to 			: msg.to,
+					body 		: msg.body,
+					timestamp 	: msg.timestamp,
+					reply 		: "Reply"
+				},
+				json: true
+			}, function(error, response, body){
+				console.log('error post : ', error);
+				console.log('body post : ', body);
+			});
+			console.log('================================================');
 		} 
-		// else {
-		// 	msg.reply('(ABAIKAN) Maaf account ini sedang di pake buat development aplikasi!');
-		// } 
 	});
 
 	client.on('authenticated', () => {
@@ -127,6 +153,50 @@ const createSession = function(id, description) {
 
 	client.on('auth_failure', function() {
 		io.emit('message', { id: id, text: 'Auth failure, restarting...' });
+	});
+
+	// functin untuk mendapatkan status message ke Client (Delivered/Read)
+	client.on('message_ack', async (msg) => {	
+		console.log('in message ack!');
+		// console.log('msg : ', msg);
+		console.log("------------------------------------------------");
+		console.log('msg.type: ', msg.type);
+		console.log('Instance : ', id);
+		console.log('msg.id.id: ', msg.id.id);
+		console.log('msg.from: ', msg.from);
+		console.log('msg.to: ', msg.to);
+		console.log('msg.ack: ', msg.ack);
+		console.log('msg.type: ', msg.type);
+		console.log('msg.body: ', msg.body);
+		console.log('msg.fromMe: ', msg.fromMe);
+		console.log('msg.timestamp: ', msg.timestamp);
+
+		// const get_message = await msg.body();
+		// console.log('get_message : ', get_message);
+		console.log('================================================');
+		console.log('=============== PUSH KE WEBHOOK ================');
+		console.log('webhookUrl : ', webhookUrl);
+		request.post({
+			url:     webhookUrl,
+			body : {
+				type: 'sent',
+				instance :  id,
+				id : msg.id.id,
+				from: msg.from,
+				to: msg.to,
+				ack: msg.ack,
+				type: msg.type,
+				body: msg.body,
+				fromMe: msg.fromMe,
+				timestamp: msg.timestamp,
+			},
+			json: true
+		  }, function(error, response, body){
+			console.log('error post : ', error);
+			console.log('body post : ', body);
+		  });
+		console.log('================================================');
+
 	});
 
 	client.on('disconnected', (reason) => {
@@ -147,6 +217,7 @@ const createSession = function(id, description) {
 	sessions.push({
 		id: id,
 		description: description,
+		webhookUrl: webhookUrl,
 		client: client
 	});
 
@@ -158,6 +229,7 @@ const createSession = function(id, description) {
 		savedSessions.push({
 			id: id,
 			description: description,
+			webhookUrl: webhookUrl,
 			ready: false,
 		});
 		setSessionsFile(savedSessions);
@@ -183,7 +255,7 @@ const init = function(socket) {
 			socket.emit('init', savedSessions);
 		} else {
 			savedSessions.forEach(sess => {
-				createSession(sess.id, sess.description);
+				createSession(sess.id, sess.description, sess.webhookUrl);
 			});
 		}
 	}
@@ -197,7 +269,7 @@ io.on('connection', function(socket) {
 
 	socket.on('create-session', function(data) {
 		console.log('Create session: ' + data.id);
-		createSession(data.id, data.description);
+		createSession(data.id, data.description, data.webhookUrl);
 	});
 });
 
@@ -303,6 +375,51 @@ app.post('/number-registered', async (req, res) => {
 		});
 	}
 
+});
+
+app.post('/message-ack', async (req, res) => {
+
+	const sender = req.body.sender;
+	const client = sessions.find(sess => sess.id == sender)?.client;
+
+	// Make sure the sender is exists & ready
+	if (!client) {
+		return res.status(422).json({
+			status: false,
+			message: `The sender: ${sender} is not found!`
+		})
+	}
+
+	// PROSES GET MESSSAGE ACK
+	let readCount;
+	client.on('message_ack', async (msg) => {	
+		console.log('in message ack!');
+		console.log('Mensaje ' + message.id);
+		console.log('Estado ' + ack);
+		console.log('================================================');
+
+		// if (!msg.fromMe) {
+		// 	await msg.getChat().then((chat) => {
+		// 		readCount = chat.sendSeen;
+		// 		console.log('readCount : ', readCount)
+		// 		console.log('masuk await ms.getChat!');
+		// 	});
+		// 	io.emit('message', { id: id, text: `Total Read Message ${readCount}` });
+		// }else{
+		// 	console.log('masuk ELSE await ms.getChat!');
+		// 	await msg.getChat().then((chat) => {
+		// 		readCount = chat.sendSeen;
+		// 		console.log('readCount : ', readCount)
+		// 	});
+		// 	io.emit('message', { id: id, text: 'masuk else...' });
+		// }
+	});
+
+
+	res.status(200).json({
+		status: true,
+		message: 'in message-ack endpoint!'
+	});
 });
 
 

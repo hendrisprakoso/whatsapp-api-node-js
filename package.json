@@ -22,6 +22,7 @@
     "http": "0.0.1-security",
     "mime-types": "^2.1.32",
     "qrcode": "^1.4.4",
+    "request": "^2.88.2",
     "socket.io": "2.3.0",
     "whatsapp-api": "^0.0.1",
     "whatsapp-web.js": "latest"

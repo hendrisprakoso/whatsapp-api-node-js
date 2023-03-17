@@ -18,6 +18,7 @@
 	.form-container {
 	  margin: 15px 0;
 	  width: 100%;
+	  margin-bottom: 10px;
 	}
 	.form-container input,
 	.form-container textarea {
@@ -34,18 +35,20 @@
 	  color: white;
 	  border: 1px solid rgb(0, 93, 0);
 	  border-radius: 2px;
-	  float: right;
+	  float: left;
 	}
 	.client-container {
+		display: grid;	
 		width: 100%;
-		height: 300px;
-	  /* display: grid;
-	  grid-template-columns: repeat(auto-fill, minmax(auto, 1fr));
-	  grid-gap: 15px;
-	  float: center;
-	  margin-top: 30px;
-	  width: auto; */
+        /* grid-template-columns: 1fr 1fr; */
+		grid-auto-columns: 1fr 200px;
+		/* grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); */
+		grid-gap: 15px;
+		float: initial;
+		margin-top: 30px;
 	}
+
+
 	.client {
 	  border: 1px solid #ccc;
 	  border-radius: 4px;
@@ -79,32 +82,35 @@
 <body>
 
 	<div id="app">
-		<h1>Whatsapp API</h1>
-		<p>Multiple Device</p>
+		<h1>Please Scan QR Code from your whatsapp application</h1>
 		<div class="form-container">
-			<label hidden for="client-id">Device ID</label><br>
-			<input hidden type="text" id="client-id" placeholder="Masukkan ID"
-			 readonly style="background-color: silver;">
-			<br><br>
 			<label for="client-description">Deskripsi</label><br>
-			<textarea rows="3" id="client-description" placeholder="Masukkan deskripsi"></textarea>
+			<input type="text" id="client-description" placeholder="Masukkan deskripsi">
+			<br><br>
+			<label for="client-description">URL Webhook</label><br>
+			<input type="text" id="client-url-webhook" placeholder="Masukkan url webhook">
 			<br>
 		</div>
+		<!-- <p>Multiple Device</p> -->
 		<div class="client-container">
-			<div class="client hide">
+			<div class="client hide" style="margin-top:0px;">
 				<h3  class="title"></h3>
-				<p hidden class="description"></p>
-				<img src="" alt="QR Code" id="qrcode">
+				<p class="description"></p>
+				<img src="" alt="QR Code" id="qrcode" style="width: 200px;">
 				<h3>Logs:</h3>
 				<ul class="logs"></ul>
 			</div>
 		</div>
-		<button class="add-client-btn">Generate QR</button>
+		<div class="form-container">
+			<button class="add-client-btn">Generate QR</button>
+		</div>
 	</div>
 
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.3.0/socket.io.js"></script>
 	<script>
+
+		// Function for Create Token/sesion Id
 		function makeid(length) {
 			let result = '';
 			const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -118,41 +124,38 @@
 		}
 
 		$(document).ready(function() {
-
-			// Sett value ID 
-			let v_id = makeid(40);
-			console.log(v_id);
-			$('#client-id').val(v_id);
-
 			var socket = io();
 			
 			// Ketika button tambah diklik
 			$('.add-client-btn').click(function() {
-				var clientId = $('#client-id').val();
-				var clientDescription = $('#client-description').val();
+				// Sett value ID 
+				var v_id = makeid(40);
+				var vCounter = counterGenerateQr();
+				console.log('vCounter : ', vCounter);
+				// if (vCounter < 2) {
+					alert('Generate QR baru!');
+					var clientId = v_id;
+					var clientDescription = $('#client-description').val();
+					var clientWebhook = $('#client-url-webhook').val();
+					var clientClass = 'client-' + clientId;
+							var template = $('.client').first().clone()
+													.removeClass('hide')
+													.addClass(clientClass);
+	
+							template.find('.title').html(clientId);
+							template.find('.description').html(clientDescription);
+							template.find('.logs').append($('<li>').text('Connecting...'));
+							$('.client-container').append(template);
+	
+							socket.emit('create-session', {
+								id: clientId,
+								description: clientDescription,
+								webhookUrl : clientWebhook
+							});
+				// } else {
+				// 	alert('Device ini sudah Generate QR, Silahkan ditunggu!');
+				// }
 
-		/**
-		 * Some peoples want to use the phone number as the ID
-		 * But because we use the ID as the html class attribute value: class="<The ID>"
-		 * It won't work. Read more on https://www.w3.org/TR/REC-html40/types.html#type-cdata
-		 * 
-		 * So, here we add the prefix to solve that problem
-		 * Each ID will automatically added a 'client-' prefix for the class attribute
-		 */
-		var clientClass = 'client-' + clientId;
-				var template = $('.client').first().clone()
-										   .removeClass('hide')
-										   .addClass(clientClass);
-
-				template.find('.title').html(clientId);
-				template.find('.description').html(clientDescription);
-				template.find('.logs').append($('<li>').text('Connecting...'));
-				$('.client-container').append(template);
-
-				socket.emit('create-session', {
-					id: clientId,
-					description: clientDescription
-				});
 			});
 
 			socket.on('init', function(data) {
@@ -163,11 +166,12 @@
 
 					var clientId = session.id;
 					var clientDescription = session.description;
+					var clientwebhook = session.webhook;
 
-		  var clientClass = 'client-' + clientId;
+					var clientClass = 'client-' + clientId;
 					var template = $('.client').first().clone()
-											   .removeClass('hide')
-											   .addClass(clientClass);
+											.removeClass('hide')
+											.addClass(clientClass);
 
 					template.find('.title').html(clientId);
 					template.find('.description').html(clientDescription);
@@ -201,7 +205,14 @@
 			socket.on('authenticated', function(data) {
 				$(`.client.client-${data.id} #qrcode`).hide();
 			});
+	
+			
 		});
+
+		function counterGenerateQr(){
+			let vCountQr = $('.client').length;
+			return vCountQr;
+		}
 	</script>
 </body>
 </html>
