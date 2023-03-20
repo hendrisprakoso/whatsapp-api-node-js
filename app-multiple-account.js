@@ -23,18 +23,21 @@ app.use(fileUpload({
 	debug: false
 }));
 
-app.get('/', (req, res) => {
+app.get('/scan/:id', (req, res) => {
 
-	// const vToken = req.params;
-	// console.log('vToken : ', vToken);
+	const vToken = req.params;
+	console.log('vToken : ', vToken);
 
 	res.sendFile('index-multiple-account.html', {
 		root: __dirname
 	});
 
-	// res.status(200).json({
-	// 	root: __dirname
-	// });
+});
+
+app.get('/list-device', (req, res) => {
+	res.sendFile('index-multiple-list-account.html', {
+		root: __dirname
+	});
 
 });
 
@@ -68,6 +71,7 @@ const getSessionsFile = function() {
 
 const createSession = function(id, description, webhookUrl) {
 	console.log('Creating session: ' + id);
+
 	const client = new Client({
 		restartOnAuthFail: true,
 		puppeteer: {
@@ -135,7 +139,7 @@ const createSession = function(id, description, webhookUrl) {
 					to 			: msg.to,
 					body 		: msg.body,
 					timestamp 	: msg.timestamp,
-					reply 		: "Reply"
+					type 		: "message"
 				},
 				json: true
 			}, function(error, response, body){
@@ -179,13 +183,12 @@ const createSession = function(id, description, webhookUrl) {
 		request.post({
 			url:     webhookUrl,
 			body : {
-				type: 'sent',
+				type: 'message ack',
 				instance :  id,
 				id : msg.id.id,
 				from: msg.from,
 				to: msg.to,
 				ack: msg.ack,
-				type: msg.type,
 				body: msg.body,
 				fromMe: msg.fromMe,
 				timestamp: msg.timestamp,
@@ -207,10 +210,11 @@ const createSession = function(id, description, webhookUrl) {
 		// Menghapus pada file sessions
 		const savedSessions = getSessionsFile();
 		const sessionIndex = savedSessions.findIndex(sess => sess.id == id);
-		savedSessions.splice(sessionIndex, 1);
+		savedSessions[sessionIndex].ready = false;
+		// savedSessions.splice(sessionIndex, 1);
 		setSessionsFile(savedSessions);
 
-		io.emit('remove-session', id);
+		// io.emit('remove-session', id);
 	});
 
 	// Tambahkan client ke sessions
@@ -340,9 +344,6 @@ app.post('/status-online', async (req, res) => {
 			});
 		}
 	}
-
-
-
 });
 
 // Check number is Registered
@@ -376,52 +377,6 @@ app.post('/number-registered', async (req, res) => {
 	}
 
 });
-
-app.post('/message-ack', async (req, res) => {
-
-	const sender = req.body.sender;
-	const client = sessions.find(sess => sess.id == sender)?.client;
-
-	// Make sure the sender is exists & ready
-	if (!client) {
-		return res.status(422).json({
-			status: false,
-			message: `The sender: ${sender} is not found!`
-		})
-	}
-
-	// PROSES GET MESSSAGE ACK
-	let readCount;
-	client.on('message_ack', async (msg) => {	
-		console.log('in message ack!');
-		console.log('Mensaje ' + message.id);
-		console.log('Estado ' + ack);
-		console.log('================================================');
-
-		// if (!msg.fromMe) {
-		// 	await msg.getChat().then((chat) => {
-		// 		readCount = chat.sendSeen;
-		// 		console.log('readCount : ', readCount)
-		// 		console.log('masuk await ms.getChat!');
-		// 	});
-		// 	io.emit('message', { id: id, text: `Total Read Message ${readCount}` });
-		// }else{
-		// 	console.log('masuk ELSE await ms.getChat!');
-		// 	await msg.getChat().then((chat) => {
-		// 		readCount = chat.sendSeen;
-		// 		console.log('readCount : ', readCount)
-		// 	});
-		// 	io.emit('message', { id: id, text: 'masuk else...' });
-		// }
-	});
-
-
-	res.status(200).json({
-		status: true,
-		message: 'in message-ack endpoint!'
-	});
-});
-
 
 server.listen(port, function() {
 	console.log('App running on *: ' + port);

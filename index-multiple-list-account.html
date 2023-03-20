@@ -35,16 +35,16 @@
 	  color: white;
 	  border: 1px solid rgb(0, 93, 0);
 	  border-radius: 2px;
-	  float: left;
+	  float: right;
 	}
 	.client-container {
 		display: grid;	
-		width: 100%;
+		/* width: 100%; */
         /* grid-template-columns: 1fr 1fr; */
 		grid-auto-columns: 1fr 200px;
-		/* grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); */
+		grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
 		grid-gap: 15px;
-		float: initial;
+		/* float: initial; */
 		margin-top: 30px;
 	}
 
@@ -82,27 +82,29 @@
 <body>
 
 	<div id="app">
-		<h3>Please Scan QR Code from your whatsapp application</h3>
-		<div class="form-container" hidden>
+		<h1>Please Scan QR Code from your whatsapp application</h1>
+		<div class="form-container">
 			<label for="client-description">Deskripsi</label><br>
 			<input type="text" id="client-description" placeholder="Masukkan deskripsi">
 			<br><br>
 			<label for="client-description">URL Webhook</label><br>
 			<input type="text" id="client-url-webhook" placeholder="Masukkan url webhook">
 			<br>
+			<button class="add-client-btn">Generate QR</button>
+			<br>
 		</div>
+		<!-- <div class="form-container">
+			<button class="add-client-btn">Generate QR</button>
+		</div> -->
 		<!-- <p>Multiple Device</p> -->
 		<div class="client-container">
 			<div class="client hide" style="margin-top:0px;">
-				<h4  class="title"></h4>
+				<h3 class="title" style="word-wrap: break-word;"></h3>
 				<p class="description"></p>
-				<img src="" alt="QR Code" id="qrcode" style="width: 200px;">
-				<h4>Logs:</h4>
+				<img src="" alt="QR Code" id="qrcode" >
+				<h3>Logs:</h3>
 				<ul class="logs"></ul>
 			</div>
-		</div>
-		<div class="form-container">
-			<button class="add-client-btn">Generate QR</button>
 		</div>
 	</div>
 
@@ -136,32 +138,27 @@
 			// Ketika button tambah diklik
 			$('.add-client-btn').click(function() {
 				// Sett value ID 
-				var v_id = getTokenDevice();
+				var v_id = makeid(40);
 				var vCounter = counterGenerateQr();
 				console.log('vCounter : ', vCounter);
-				if (vCounter < 2) {
-					var clientId = v_id;
-					var clientDescription = $('#client-description').val();
-					var clientWebhook = $('#client-url-webhook').val();
-					var clientClass = 'client-' + clientId;
-							var template = $('.client').first().clone()
-													.removeClass('hide')
-													.addClass(clientClass);
-	
-							template.find('.title').html(clientId);
-							template.find('.description').html(clientDescription);
-							template.find('.logs').append($('<li>').text('Connecting...'));
-							$('.client-container').append(template);
-	
-							socket.emit('create-session', {
-								id: clientId,
-								description: clientDescription,
-								webhookUrl : clientWebhook
-							});
-				} else {
-					alert('Device ini sudah Generate QR, Silahkan ditunggu!');
-				}
+				var clientId = v_id;
+				var clientDescription = $('#client-description').val();
+				var clientWebhook = $('#client-url-webhook').val();
+				var clientClass = 'client-' + clientId;
+				var template = $('.client').first().clone()
+										.removeClass('hide')
+										.addClass(clientClass);
 
+				template.find('.title').html(clientId);
+				template.find('.description').html(clientDescription);
+				template.find('.logs').append($('<li>').text('Connecting...'));
+				$('.client-container').append(template);
+
+				socket.emit('create-session', {
+					id: clientId,
+					description: clientDescription,
+					webhookUrl : clientWebhook
+				});
 			});
 
 			socket.on('init', function(data) {
@@ -169,33 +166,27 @@
 				console.log("init data : ", data);
 				for (var i = 0; i < data.length; i++) {
 					var session = data[i];
+
 					
 					// Checking agar QR yang di tampilan sesuai dengan Parameter Token
-					let v_param_token = getTokenDevice();
-					if (session.id === v_param_token) {
-						var clientId = session.id;
-						var clientDescription = session.description;
-						var clientwebhook = session.webhookUrl;
+					var clientId = session.id;
+					var clientDescription = session.description;
+					var clientwebhook = session.webhookUrl;
 
-						console.log("clientId : ", clientId);
-						console.log("clientDescription : ", clientDescription);
-						console.log("clientwebhook : ", clientwebhook);
-	
-						var clientClass = 'client-' + clientId;
-						var template = $('.client').first().clone()
-												.removeClass('hide')
-												.addClass(clientClass);
-	
-						template.find('.title').html(clientId);
-						template.find('.description').html(clientDescription);
-						$('.client-container').append(template);
-	
-						if (session.ready) {
-							$(`.client.${clientClass} .logs`).prepend($('<li>').text('Whatsapp is ready!'));
-						} else {
-							$(`.client.${clientClass} .logs`).prepend($('<li>').text('Connecting...'));
-						}
-					} 
+					var clientClass = 'client-' + clientId;
+					var template = $('.client').first().clone()
+											.removeClass('hide')
+											.addClass(clientClass);
+
+					template.find('.title').html(clientId);
+					template.find('.description').html(clientDescription);
+					$('.client-container').append(template);
+
+					if (session.ready) {
+						$(`.client.${clientClass} .logs`).prepend($('<li>').text('Whatsapp is ready!'));
+					} else {
+						$(`.client.${clientClass} .logs`).prepend($('<li>').text('Connecting...'));
+					}
 				}
 			});
 
@@ -219,8 +210,6 @@
 			socket.on('authenticated', function(data) {
 				$(`.client.client-${data.id} #qrcode`).hide();
 			});
-	
-			
 		});
 
 		function counterGenerateQr(){
