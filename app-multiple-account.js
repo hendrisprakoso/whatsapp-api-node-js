@@ -229,6 +229,8 @@ const createSession = function(id, description, webhookUrl) {
 	const savedSessions = getSessionsFile();
 	const sessionIndex = savedSessions.findIndex(sess => sess.id == id);
 
+	// console.log('sessionIndex : ', sessionIndex);
+
 	if (sessionIndex == -1) {
 		savedSessions.push({
 			id: id,
@@ -236,6 +238,11 @@ const createSession = function(id, description, webhookUrl) {
 			webhookUrl: webhookUrl,
 			ready: false,
 		});
+		setSessionsFile(savedSessions);
+	}
+	else if (sessionIndex > -1){
+		savedSessions[sessionIndex].description = description;
+		savedSessions[sessionIndex].webhookUrl = webhookUrl;
 		setSessionsFile(savedSessions);
 	}
 }
@@ -318,7 +325,7 @@ app.post('/send-message', async (req, res) => {
 });
 
 // Check Status Online
-app.post('/status-online', async (req, res) => {
+app.post('/status-device', async (req, res) => {
 
 	const sender = req.body.sender;
 	// const vStatusOnline = sessions.find(sess => sess.id == sender )?.client;

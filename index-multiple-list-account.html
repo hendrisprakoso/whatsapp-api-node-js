@@ -84,6 +84,9 @@
 	<div id="app">
 		<h1>Please Scan QR Code from your whatsapp application</h1>
 		<div class="form-container">
+			<label hidden for="client-description">ID Token</label><br>
+			<input hidden type="text" id="client-id" readonly>
+			<!-- <br><br> -->
 			<label for="client-description">Deskripsi</label><br>
 			<input type="text" id="client-description" placeholder="Masukkan deskripsi">
 			<br><br>
@@ -97,10 +100,11 @@
 			<button class="add-client-btn">Generate QR</button>
 		</div> -->
 		<!-- <p>Multiple Device</p> -->
-		<div class="client-container">
+		<div class="client-container item-qr">
 			<div class="client hide" style="margin-top:0px;">
 				<h3 class="title" style="word-wrap: break-word;"></h3>
 				<p class="description"></p>
+				
 				<img src="" alt="QR Code" id="qrcode" >
 				<h3>Logs:</h3>
 				<ul class="logs"></ul>
@@ -210,7 +214,19 @@
 			socket.on('authenticated', function(data) {
 				$(`.client.client-${data.id} #qrcode`).hide();
 			});
+
 		});
+
+		// $('.item-qr').on("click", function(){
+
+		// 	let vToken = $(this).find("h3.title").text();
+		// 	let vDescription = $(this).find("p.description").text();
+
+		// 	$('#client-id').val(vToken);
+		// 	$('#client-description').val(vDescription);
+		// 	$('#client-url-webhook').val();
+
+		// });
 
 		function counterGenerateQr(){
 			let vCountQr = $('.client').length;
