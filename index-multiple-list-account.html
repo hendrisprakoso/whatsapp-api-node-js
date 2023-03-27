@@ -141,10 +141,12 @@
 
 			// Ketika button tambah diklik
 			$('.add-client-btn').click(function() {
+				// if ($('#client-id').val() == "") {
+					
+				// }
 				// Sett value ID 
 				var v_id = makeid(40);
 				var vCounter = counterGenerateQr();
-				console.log('vCounter : ', vCounter);
 				var clientId = v_id;
 				var clientDescription = $('#client-description').val();
 				var clientWebhook = $('#client-url-webhook').val();
@@ -218,7 +220,7 @@
 		});
 
 		// $('.item-qr').on("click", function(){
-
+		// 	$(this ).find('.client').attr('style', 'background-color:silver;');
 		// 	let vToken = $(this).find("h3.title").text();
 		// 	let vDescription = $(this).find("p.description").text();
 
