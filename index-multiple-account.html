@@ -28,14 +28,26 @@
 	  padding: 5px 8px;
 	  font-family: inherit;
 	}
+	
 	.add-client-btn {
 	  padding: 6px 15px;
 	  margin-top: 10px;
 	  background: green;
 	  color: white;
-	  border: 1px solid rgb(0, 93, 0);
-	  border-radius: 2px;
+	  border: 0px solid rgb(0, 93, 0);
+	  border-radius: 5px;
 	  float: left;
+	}
+
+	.logout-client-btn {
+	  padding: 6px 15px;
+	  margin-top: 10px;
+	  margin-left: 10px;
+	  background: red;
+	  color: white;
+	  border: 0px solid rgb(0, 93, 0);
+	  border-radius: 5px;
+	  float: right;
 	}
 	.client-container {
 		display: grid;	
@@ -94,34 +106,23 @@
 		<!-- <p>Multiple Device</p> -->
 		<div class="client-container">
 			<div class="client hide" style="margin-top:0px;">
-				<h4  class="title"></h4>
+				<!-- <button hidden class="client-logout-btn">Logout</button>
+				<br><br> -->
+				<h4 class="title"></h4>
 				<p class="description"></p>
 				<img src="" alt="QR Code" id="qrcode" style="width: 200px;">
 				<h4>Logs:</h4>
 				<ul class="logs"></ul>
 			</div>
 		</div>
-		<!-- <div class="form-container">
+		<div class="form-container">
 			<button class="add-client-btn">Generate QR</button>
-		</div> -->
+		</div>
 	</div>
 
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.3.0/socket.io.js"></script>
 	<script>
-
-		// Function for Create Token/sesion Id
-		function makeid(length) {
-			let result = '';
-			const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-			const charactersLength = characters.length;
-			let counter = 0;
-			while (counter < length) {
-			result += characters.charAt(Math.floor(Math.random() * charactersLength));
-			counter += 1;
-			}
-			return result.toLowerCase();
-		}
 
 		function getTokenDevice(){
 			// Get Token from URL 
@@ -132,8 +133,7 @@
 
 		$(document).ready(function() {
 			var socket = io();		
-
-			// Ketika button tambah diklik
+						
 			$('.add-client-btn').click(function() {
 				// Sett value ID 
 				var v_id = getTokenDevice();
@@ -141,26 +141,57 @@
 				console.log('vCounter : ', vCounter);
 				if (vCounter < 2) {
 					var clientId = v_id;
-					var clientDescription = $('#client-description').val();
-					var clientWebhook = $('#client-url-webhook').val();
-					var clientClass = 'client-' + clientId;
-							var template = $('.client').first().clone()
-													.removeClass('hide')
-													.addClass(clientClass);
-	
-							template.find('.title').html(clientId);
-							template.find('.description').html(clientDescription);
-							template.find('.logs').append($('<li>').text('Connecting...'));
-							$('.client-container').append(template);
-	
-							socket.emit('create-session', {
-								id: clientId,
-								description: clientDescription,
-								webhookUrl : clientWebhook
-							});
+					var clientDescription = '';
+					var clientWebhook = '';
+					$.ajax({
+						type: "POST",
+						url: "http://localhost:8000/detail-device",
+						data: {
+							key: v_id
+						},
+						success: function(data){
+							console.log(data);
+							if (data.status != false && data.results.length > 0) {
+								clientDescription = data.results[0].description;
+								clientWebhook = data.results[0].webhookUrl;
+
+								var clientClass = 'client-' + clientId;
+								var template = $('.client').first().clone()
+														.removeClass('hide')
+														.addClass(clientClass);
+			
+								// template.find('.client-logout-btn').html(clientId);
+								template.find('.title').html(clientId);
+								template.find('.description').html(clientDescription);
+								template.find('.logs').append($('<li>').text('Connecting...'));
+								$('.client-container').append(template);
+				
+								socket.emit('create-session', {
+									id: clientId,
+									description: clientDescription,
+									webhookUrl : clientWebhook
+								});
+								
+							}else if(data.results.length == 0){
+								alert('Device not Registered!');
+							}else{
+								alert('Generate Failed!');
+							}
+						},
+						error: function(){
+							alert('Generate QR Code!');
+						}
+					});
+
 				} else {
 					alert('Device ini sudah Generate QR, Silahkan ditunggu!');
 				}
+
+			});
+
+			$('.logout-client-btn').click(function(){
+
+				console.log('Button logout clicked!');
 
 			});
 
@@ -173,13 +204,10 @@
 					// Checking agar QR yang di tampilan sesuai dengan Parameter Token
 					let v_param_token = getTokenDevice();
 					if (session.id === v_param_token) {
+						console.log('masuk ke if');
 						var clientId = session.id;
 						var clientDescription = session.description;
 						var clientwebhook = session.webhookUrl;
-
-						console.log("clientId : ", clientId);
-						console.log("clientDescription : ", clientDescription);
-						console.log("clientwebhook : ", clientwebhook);
 	
 						var clientClass = 'client-' + clientId;
 						var template = $('.client').first().clone()
@@ -190,6 +218,10 @@
 						template.find('.description').html(clientDescription);
 						$('.client-container').append(template);
 	
+
+						console.log("session.ready: ", session.ready);
+						console.log("session.ready: ", session.ready);
+
 						if (session.ready) {
 							$(`.client.${clientClass} .logs`).prepend($('<li>').text('Whatsapp is ready!'));
 						} else {
@@ -210,14 +242,17 @@
 			socket.on('qr', function(data) {
 				$(`.client.client-${data.id} #qrcode`).attr('src', data.src);
 				$(`.client.client-${data.id} #qrcode`).show();
+				// $(`.client-logout-btn-${data.id}`).attr('hidden', true);
 			});
 
 			socket.on('ready', function(data) {
 				$(`.client.client-${data.id} #qrcode`).hide();
+				// $(`.client-logout-btn-${data.id}`).removeAttr('hidden');
 			});
 
 			socket.on('authenticated', function(data) {
 				$(`.client.client-${data.id} #qrcode`).hide();
+				// $(`.client-logout-btn-${data.id}`).attr('hidden', true);
 			});
 	
 			

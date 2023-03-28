@@ -141,9 +141,6 @@
 
 			// Ketika button tambah diklik
 			$('.add-client-btn').click(function() {
-				// if ($('#client-id').val() == "") {
-					
-				// }
 				// Sett value ID 
 				var v_id = makeid(40);
 				var vCounter = counterGenerateQr();
@@ -169,15 +166,13 @@
 
 			socket.on('init', function(data) {
 				$('.client-container .client').not(':first').remove();
-				console.log("init data : ", data);
 				for (var i = 0; i < data.length; i++) {
 					var session = data[i];
 
-					
 					// Checking agar QR yang di tampilan sesuai dengan Parameter Token
 					var clientId = session.id;
 					var clientDescription = session.description;
-					var clientwebhook = session.webhookUrl;
+					var clientWebhook = session.webhookUrl;
 
 					var clientClass = 'client-' + clientId;
 					var template = $('.client').first().clone()
@@ -205,6 +200,7 @@
 			});
 
 			socket.on('qr', function(data) {
+				console.log('in Socket QR');
 				$(`.client.client-${data.id} #qrcode`).attr('src', data.src);
 				$(`.client.client-${data.id} #qrcode`).show();
 			});

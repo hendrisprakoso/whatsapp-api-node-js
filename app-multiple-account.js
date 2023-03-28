@@ -1,3 +1,4 @@
+// IMPORT LIB NODE JS
 const { Client, MessageMedia, LocalAuth } = require('whatsapp-web.js');
 const express = require('express');
 const socketIO = require('socket.io');
@@ -8,14 +9,20 @@ const request = require('request');
 const { phoneNumberFormatter, makeIdToken } = require('./helpers/formatter');
 const fileUpload = require('express-fileupload');
 const axios = require('axios');
+
+
+// IMPORT DEFINE LIB 
 const hostname = "0.0.0.0"
 const port = process.env.PORT || 8000;
-
-const conDb = require('./config/mysql');
-
 const app = express();
 const server = http.createServer(app);
 const io = socketIO(server);
+
+
+// IMPORT FROM ANOTHER FILE
+const { getDataListDevice, getDataDeviceByToken, addNewDevice } = require('./model/waModel');
+const conDb = require('./config/mysql');
+
 
 app.use(express.json());
 app.use(express.urlencoded({
@@ -72,50 +79,10 @@ const setSessionsFile = function(sessions) {
 		if (err) {
 			console.log(err);
 		}
-	});
-
-	// Insert ke database
-	// for (i = 0; i < sessions.length; i++) {
-	// 	let param = [];
-	// 	param.push(sessions[i].description);
-	// 	param.push(sessions[i].id);
-	// 	param.push(sessions[i].webhookUrl);
-	// 	param.push(sessions[i].ready);
-	// 	sqlQuery = 'INSERT INTO wa_list_device_tab (wad_device_id, wad_token, wad_webhook_url, wad_ready) values (?) ON DUPLICATE KEY UPDATE wad_webhook_url = ?, wad_ready = ?';
-	// 	conDb.query(sqlQuery,
-	// 				[param, sessions[i].webhookUrl, sessions[i].ready], (err, result) => {
-	// 					if (err) throw err;
-	// 					console.log("Data Inserted : ", result.affectedRows);
-	// 				});
-	// }	
+	});	
 }
 
 const getSessionsFile = function() {
-		
-	// var dataLoadDevice = [];
-	// sqlQuery = "SELECT wad_token as id, wad_device_id as description, wad_webhook_url as webhookUrl, wad_ready as ready FROM db_wa.wa_list_device_tab";
-	// conDb.query(sqlQuery,
-	// 	(err, result) => {
-	// 		if (err) throw err;
-	// 		if (result.length > 0 ) {
-	// 			for (i = 0; i < result.length; i++) {
-	// 				if (result[i].ready == 1) {
-	// 					result[i].ready = true;
-	// 				} else {
-	// 					result[i].ready = false;
-	// 				}
-	// 				dataLoadDevice.push(result[i]);
-	// 			}
-	// 			fs.writeFileSync(SESSIONS_FILE, JSON.stringify(dataLoadDevice), function(err) {
-	// 				if (err) {
-	// 					console.log(err);
-	// 				}
-	// 			});
-	// 		}
-	// });
-
-	// console.log('dataLoadDevice : ', dataLoadDevice);
-				
 	return JSON.parse(fs.readFileSync(SESSIONS_FILE));
 }
 
@@ -261,9 +228,9 @@ const createSession = function(id, description, webhookUrl) {
 		// Menghapus pada file sessions
 		const savedSessions = getSessionsFile();
 		const sessionIndex = savedSessions.findIndex(sess => sess.id == id);
-		savedSessions[sessionIndex].ready = false;
+		// savedSessions[sessionIndex].ready = false;
 		savedSessions.splice(sessionIndex, 1);
-		// setSessionsFile(savedSessions);
+		setSessionsFile(savedSessions);
 
 		io.emit('remove-session', id);
 	});
@@ -278,6 +245,7 @@ const createSession = function(id, description, webhookUrl) {
 
 	// Menambahkan session ke file
 	const savedSessions = getSessionsFile();
+	console.log('savedSessions in Create Session : ', savedSessions);
 	const sessionIndex = savedSessions.findIndex(sess => sess.id == id);
 
 	// console.log('sessionIndex : ', sessionIndex);
@@ -310,15 +278,15 @@ const init = function(socket) {
 			 * So to make people not confused for the 'ready' status
 			 * We need to make it as FALSE for this condition
 			 */
-			savedSessions.forEach((e, i, arr) => {
-				arr[i].ready = false;
-			});
+			// savedSessions.forEach((e, i, arr) => {
+			// 	arr[i].ready = false;
+			// });
 
 			socket.emit('init', savedSessions);
 		} else {
 			console.log('in ELSE SOCKET');
-			console.log('savedSessions init : ', savedSessions);
 			savedSessions.forEach(sess => {
+				console.log('Session saved : ', sess);
 				createSession(sess.id, sess.description, sess.webhookUrl);
 			});
 		}
@@ -441,32 +409,55 @@ app.post('/number-registered', async (req, res) => {
 app.post('/add-device', async (req, res) => {
 	const description = req.body.description;
 	const webhookUrl = req.body.webhookUrl;
-	const id = makeIdToken(40)
+	const vGenerateToken = makeIdToken(40);
 
-	console.log('description : ', description);
-	console.log('webhookUrl : ', webhookUrl);
-	console.log('id : ', id);
 
-	createSession(id, description, webhookUrl);
-
-	sqlQuery = 'INSERT INTO wa_list_device_tab (wad_device_id, wad_token, wad_webhook_url, wad_ready) values (?, ?, ?, ?) ON DUPLICATE KEY UPDATE wad_token = ?, wad_webhook_url = ?, wad_ready = ?';
-	conDb.query(
-		sqlQuery,
-		[description, id, webhookUrl, false, id, webhookUrl, false], (err, result) => {
-		if (err){
+	addNewDevice(description, vGenerateToken, webhookUrl, (err, result) => {
+		if (err) {
+			console.log('ERROR  : ', err);
 			res.status(500).json({
 				status: false, 
-				message: "FAILED add new device!" 
+				message: `Add new device FAILED! ${err.code}`
 			});
 		}else{
 			res.status(200).json({
-				status: true, 
-				message: "Device Created!"
+				status: true,
+				message: "Add new device Successfully!"
 			});
 		}
 	});
 });
 
+app.post('/detail-device', async (req, res) => {
+
+	var vToken = req.body.key;
+	console.log('vToken : ', vToken);
+
+	getDataDeviceByToken(vToken, (err, result) => {
+		if (err) {
+			res.status(500).json({
+				status: false, 
+				message: err,
+				results: []
+			});		
+		}else{
+			if (result.length > 0) {
+				res.status(200).json({
+					status: true, 
+					message: "success",
+					results: result
+				});
+				return;
+			}
+
+			res.status(404).json({
+				status: false, 
+				message: "Data not found!",
+				results: result
+			});
+		}
+	});
+});
 
 server.listen(port, hostname, function() {
 	console.log('App running on *: ' + port);
