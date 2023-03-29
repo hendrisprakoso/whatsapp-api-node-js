@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-	<title>Whatsapp API by Ngekoding</title>
+	<title>Whatsapp API</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <!-- This parts is optional, just for improve the styles -->
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
@@ -106,8 +106,6 @@
 		<!-- <p>Multiple Device</p> -->
 		<div class="client-container">
 			<div class="client hide" style="margin-top:0px;">
-				<!-- <button hidden class="client-logout-btn">Logout</button>
-				<br><br> -->
 				<h4 class="title"></h4>
 				<p class="description"></p>
 				<img src="" alt="QR Code" id="qrcode" style="width: 200px;">
@@ -117,9 +115,12 @@
 		</div>
 		<div class="form-container">
 			<button class="add-client-btn">Generate QR</button>
+			<!-- <button class="logout-client-btn">Logout</button> -->
 		</div>
 	</div>
 
+	<!-- <script src="./utilities/lib-js/jquery.min.js"></script>
+	<script src="./utilities/lib-js/socket.io.js"></script> -->
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.3.0/socket.io.js"></script>
 	<script>
@@ -138,7 +139,6 @@
 				// Sett value ID 
 				var v_id = getTokenDevice();
 				var vCounter = counterGenerateQr();
-				console.log('vCounter : ', vCounter);
 				if (vCounter < 2) {
 					var clientId = v_id;
 					var clientDescription = '';
@@ -150,7 +150,6 @@
 							key: v_id
 						},
 						success: function(data){
-							console.log(data);
 							if (data.status != false && data.results.length > 0) {
 								clientDescription = data.results[0].description;
 								clientWebhook = data.results[0].webhookUrl;
@@ -184,27 +183,23 @@
 					});
 
 				} else {
-					alert('Device ini sudah Generate QR, Silahkan ditunggu!');
+					let vConfirm = confirm('Anda ingin melakukan Generate ulang ?');
+					socket.emit('re-generate', {
+						id: v_id
+					});
+					location.reload();
 				}
-
-			});
-
-			$('.logout-client-btn').click(function(){
-
-				console.log('Button logout clicked!');
 
 			});
 
 			socket.on('init', function(data) {
 				$('.client-container .client').not(':first').remove();
-				console.log("init data : ", data);
 				for (var i = 0; i < data.length; i++) {
 					var session = data[i];
 					
 					// Checking agar QR yang di tampilan sesuai dengan Parameter Token
 					let v_param_token = getTokenDevice();
 					if (session.id === v_param_token) {
-						console.log('masuk ke if');
 						var clientId = session.id;
 						var clientDescription = session.description;
 						var clientwebhook = session.webhookUrl;
@@ -217,10 +212,6 @@
 						template.find('.title').html(clientId);
 						template.find('.description').html(clientDescription);
 						$('.client-container').append(template);
-	
-
-						console.log("session.ready: ", session.ready);
-						console.log("session.ready: ", session.ready);
 
 						if (session.ready) {
 							$(`.client.${clientClass} .logs`).prepend($('<li>').text('Whatsapp is ready!'));
@@ -233,6 +224,7 @@
 
 			socket.on('remove-session', function(id) {
 				$(`.client.client-${id}`).remove();
+				location.reload();
 			});
 
 			socket.on('message', function(data) {
@@ -254,8 +246,7 @@
 				$(`.client.client-${data.id} #qrcode`).hide();
 				// $(`.client-logout-btn-${data.id}`).attr('hidden', true);
 			});
-	
-			
+		
 		});
 
 		function counterGenerateQr(){

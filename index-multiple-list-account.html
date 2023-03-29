@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-	<title>Whatsapp API by Ngekoding</title>
+	<title>Whatsapp API</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <!-- This parts is optional, just for improve the styles -->
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
@@ -11,10 +11,12 @@
 	  padding: 0;
 	  box-sizing: border-box;
 	}
+
 	body {
 	  font-family: 'Montserrat', sans-serif;
 	  padding: 20px;
 	}
+	
 	.form-container {
 	  margin: 15px 0;
 	  width: 100%;
@@ -28,6 +30,7 @@
 	  padding: 5px 8px;
 	  font-family: inherit;
 	}
+
 	.add-client-btn {
 	  padding: 6px 15px;
 	  margin-top: 10px;
@@ -37,6 +40,17 @@
 	  border-radius: 2px;
 	  float: right;
 	}
+
+	.view-detail-btn {
+	  padding: 6px 15px;
+	  margin-top: 10px;
+	  background: cadetblue;
+	  color: white;
+	  border: 0px solid rgb(0, 93, 0);
+	  border-radius: 2px;
+	  width: 100%;
+	}
+
 	.client-container {
 		display: grid;	
 		/* width: 100%; */
@@ -47,8 +61,6 @@
 		/* float: initial; */
 		margin-top: 30px;
 	}
-
-
 	.client {
 	  border: 1px solid #ccc;
 	  border-radius: 4px;
@@ -82,11 +94,11 @@
 <body>
 
 	<div id="app">
-		<h1>Please Scan QR Code from your whatsapp application</h1>
-		<div class="form-container">
+		<h1>List Device</h1>
+
+		<!-- <div class="form-container">
 			<label hidden for="client-description">ID Token</label><br>
 			<input hidden type="text" id="client-id" readonly>
-			<!-- <br><br> -->
 			<label for="client-description">Deskripsi</label><br>
 			<input type="text" id="client-description" placeholder="Masukkan deskripsi">
 			<br><br>
@@ -95,19 +107,19 @@
 			<br>
 			<button class="add-client-btn">Generate QR</button>
 			<br>
-		</div>
-		<!-- <div class="form-container">
-			<button class="add-client-btn">Generate QR</button>
 		</div> -->
-		<!-- <p>Multiple Device</p> -->
-		<div class="client-container item-qr">
+
+		<div id="grid-list" class="client-container">
 			<div class="client hide" style="margin-top:0px;">
 				<h3 class="title" style="word-wrap: break-word;"></h3>
 				<p class="description"></p>
-				
-				<img src="" alt="QR Code" id="qrcode" >
-				<h3>Logs:</h3>
-				<ul class="logs"></ul>
+				<br>
+				<ul class="logs"></ul> 
+				<a class="link-redirect" href="" target="_blank">
+					<button type="button" class="view-detail-btn">Detail</button>
+				</a>
+
+				<!-- <img src="" alt="QR Code" id="qrcode" > -->
 			</div>
 		</div>
 	</div>
@@ -115,6 +127,51 @@
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.3.0/socket.io.js"></script>
 	<script>
+
+
+		$(document).ready(function(){
+			$.ajax({
+				type: "POST",
+				url: "http://localhost:8000/list-device",
+				success: function(data){
+					if (data.status != false && data.results.length > 0) {
+						for (i = 0; i < data.results.length; i++) {
+							clientId = data.results[i].id;
+							clientName = data.results[i].description;
+							clientStatus = data.results[i].ready;
+							urlRedirect = `http://localhost:8000/scan/${clientId}`;
+	
+							var clientClass = 'client-' + clientId;
+							var template = $('.client').first().clone()
+													.removeClass('hide')
+													.addClass(clientClass);
+		
+							// template.find('.client-logout-btn').html(clientId);
+							template.find('.title').html(clientId);
+							template.find('.description').html(clientName);
+							template.find('.link-redirect').attr('href', urlRedirect);
+							if (clientStatus) {
+								template.find('.logs').prepend($('<li>').text('Active'));
+							} else {
+								template.find('.logs').prepend($('<li>').text('Scan QR'));
+							}
+
+
+							$('.client-container').append(template);
+						}
+					}else if(data.results.length == 0){
+						alert('Data device not Found!');
+					}else{
+						alert('Generate Failed!');
+					}
+				},
+				error: function(error){
+					alert('Internal Server Error!');
+				}
+			});
+
+		});
+
 
 		// Function for Create Token/sesion Id
 		function makeid(length) {
@@ -136,93 +193,81 @@
 			return v_url_split[v_url_split.length-1];
 		}
 
-		$(document).ready(function() {
-			var socket = io();		
+		// $(document).ready(function() {
+		// 	var socket = io();		
 
-			// Ketika button tambah diklik
-			$('.add-client-btn').click(function() {
-				// Sett value ID 
-				var v_id = makeid(40);
-				var vCounter = counterGenerateQr();
-				var clientId = v_id;
-				var clientDescription = $('#client-description').val();
-				var clientWebhook = $('#client-url-webhook').val();
-				var clientClass = 'client-' + clientId;
-				var template = $('.client').first().clone()
-										.removeClass('hide')
-										.addClass(clientClass);
+		// 	// Ketika button tambah diklik
+		// 	$('.add-client-btn').click(function() {
+		// 		// Sett value ID 
+		// 		var v_id = makeid(40);
+		// 		var vCounter = counterGenerateQr();
+		// 		var clientId = v_id;
+		// 		var clientDescription = $('#client-description').val();
+		// 		var clientWebhook = $('#client-url-webhook').val();
+		// 		var clientClass = 'client-' + clientId;
+		// 		var template = $('.client').first().clone()
+		// 								.removeClass('hide')
+		// 								.addClass(clientClass);
 
-				template.find('.title').html(clientId);
-				template.find('.description').html(clientDescription);
-				template.find('.logs').append($('<li>').text('Connecting...'));
-				$('.client-container').append(template);
+		// 		template.find('.title').html(clientId);
+		// 		template.find('.description').html(clientDescription);
+		// 		template.find('.logs').append($('<li>').text('Connecting...'));
+		// 		$('.client-container').append(template);
 
-				socket.emit('create-session', {
-					id: clientId,
-					description: clientDescription,
-					webhookUrl : clientWebhook
-				});
-			});
+		// 		socket.emit('create-session', {
+		// 			id: clientId,
+		// 			description: clientDescription,
+		// 			webhookUrl : clientWebhook
+		// 		});
+		// 	});
 
-			socket.on('init', function(data) {
-				$('.client-container .client').not(':first').remove();
-				for (var i = 0; i < data.length; i++) {
-					var session = data[i];
+		// 	socket.on('init', function(data) {
+		// 		$('.client-container .client').not(':first').remove();
+		// 		for (var i = 0; i < data.length; i++) {
+		// 			var session = data[i];
 
-					// Checking agar QR yang di tampilan sesuai dengan Parameter Token
-					var clientId = session.id;
-					var clientDescription = session.description;
-					var clientWebhook = session.webhookUrl;
+		// 			// Checking agar QR yang di tampilan sesuai dengan Parameter Token
+		// 			var clientId = session.id;
+		// 			var clientDescription = session.description;
+		// 			var clientWebhook = session.webhookUrl;
 
-					var clientClass = 'client-' + clientId;
-					var template = $('.client').first().clone()
-											.removeClass('hide')
-											.addClass(clientClass);
+		// 			var clientClass = 'client-' + clientId;
+		// 			var template = $('.client').first().clone()
+		// 									.removeClass('hide')
+		// 									.addClass(clientClass);
 
-					template.find('.title').html(clientId);
-					template.find('.description').html(clientDescription);
-					$('.client-container').append(template);
+		// 			template.find('.title').html(clientId);
+		// 			template.find('.description').html(clientDescription);
+		// 			$('.client-container').append(template);
 
-					if (session.ready) {
-						$(`.client.${clientClass} .logs`).prepend($('<li>').text('Whatsapp is ready!'));
-					} else {
-						$(`.client.${clientClass} .logs`).prepend($('<li>').text('Connecting...'));
-					}
-				}
-			});
+		// 			if (session.ready) {
+		// 				$(`.client.${clientClass} .logs`).prepend($('<li>').text('Whatsapp is ready!'));
+		// 			} else {
+		// 				$(`.client.${clientClass} .logs`).prepend($('<li>').text('Connecting...'));
+		// 			}
+		// 		}
+		// 	});
 
-			socket.on('remove-session', function(id) {
-				$(`.client.client-${id}`).remove();
-			});
+		// 	socket.on('remove-session', function(id) {
+		// 		$(`.client.client-${id}`).remove();
+		// 	});
 
-			socket.on('message', function(data) {
-				$(`.client.client-${data.id} .logs`).prepend($('<li>').text(data.text));
-			});
+		// 	socket.on('message', function(data) {
+		// 		$(`.client.client-${data.id} .logs`).prepend($('<li>').text(data.text));
+		// 	});
 
-			socket.on('qr', function(data) {
-				console.log('in Socket QR');
-				$(`.client.client-${data.id} #qrcode`).attr('src', data.src);
-				$(`.client.client-${data.id} #qrcode`).show();
-			});
+		// 	socket.on('qr', function(data) {
+		// 		$(`.client.client-${data.id} #qrcode`).attr('src', data.src);
+		// 		$(`.client.client-${data.id} #qrcode`).show();
+		// 	});
 
-			socket.on('ready', function(data) {
-				$(`.client.client-${data.id} #qrcode`).hide();
-			});
+		// 	socket.on('ready', function(data) {
+		// 		$(`.client.client-${data.id} #qrcode`).hide();
+		// 	});
 
-			socket.on('authenticated', function(data) {
-				$(`.client.client-${data.id} #qrcode`).hide();
-			});
-
-		});
-
-		// $('.item-qr').on("click", function(){
-		// 	$(this ).find('.client').attr('style', 'background-color:silver;');
-		// 	let vToken = $(this).find("h3.title").text();
-		// 	let vDescription = $(this).find("p.description").text();
-
-		// 	$('#client-id').val(vToken);
-		// 	$('#client-description').val(vDescription);
-		// 	$('#client-url-webhook').val();
+		// 	socket.on('authenticated', function(data) {
+		// 		$(`.client.client-${data.id} #qrcode`).hide();
+		// 	});
 
 		// });
 

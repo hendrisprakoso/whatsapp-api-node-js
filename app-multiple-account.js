@@ -5,6 +5,7 @@ const socketIO = require('socket.io');
 const qrcode = require('qrcode');
 const http = require('http');
 const fs = require('fs');
+// const rimraf = require("rimraf");
 const request = require('request');
 const { phoneNumberFormatter, makeIdToken } = require('./helpers/formatter');
 const fileUpload = require('express-fileupload');
@@ -43,8 +44,6 @@ app.get('/', (req, res) => {
 app.get('/scan/:id', (req, res) => {
 
 	const vToken = req.params;
-	console.log('vToken : ', vToken);
-
 	res.sendFile('index-multiple-account.html', {
 		root: __dirname
 	});
@@ -135,16 +134,6 @@ const createSession = function(id, description, webhookUrl) {
 		if (msg.body == '!ping') {
 			msg.reply('pong');
 		} else {
-			console.log('+=========================================+')
-			console.log('msg.id.id : ', msg.id.id)
-			console.log('msg._data.notifyName : ', msg._data.notifyName)
-			console.log('msg.fromMe : ', msg.fromMe)
-			console.log('msg.from : ', msg.from)
-			console.log('msg.to : ', msg.to)
-			console.log('msg.body : ', msg.body)
-			console.log('msg.timestamp : ', msg.timestamp)
-			console.log('msg.reply : Reply')
-			console.log('+=========================================+')
 			console.log('=============== PUSH KE WEBHOOK (REPLY) ================');
 			console.log('webhookUrl : ', webhookUrl);
 			request.post({
@@ -179,23 +168,6 @@ const createSession = function(id, description, webhookUrl) {
 
 	// function untuk mendapatkan status message ke Client (Delivered/Read)
 	client.on('message_ack', async (msg) => {	
-		console.log('in message ack!');
-		// console.log('msg : ', msg);
-		console.log("------------------------------------------------");
-		console.log('msg.type: ', msg.type);
-		console.log('Instance : ', id);
-		console.log('msg.id.id: ', msg.id.id);
-		console.log('msg.from: ', msg.from);
-		console.log('msg.to: ', msg.to);
-		console.log('msg.ack: ', msg.ack);
-		console.log('msg.type: ', msg.type);
-		console.log('msg.body: ', msg.body);
-		console.log('msg.fromMe: ', msg.fromMe);
-		console.log('msg.timestamp: ', msg.timestamp);
-
-		// const get_message = await msg.body();
-		// console.log('get_message : ', get_message);
-		console.log('================================================');
 		console.log('=============== PUSH KE WEBHOOK ================');
 		console.log('webhookUrl : ', webhookUrl);
 		request.post({
@@ -231,6 +203,9 @@ const createSession = function(id, description, webhookUrl) {
 		// savedSessions[sessionIndex].ready = false;
 		savedSessions.splice(sessionIndex, 1);
 		setSessionsFile(savedSessions);
+
+		// Delete folder session
+		// rimraf.sync(`./.wwebjs_auth/session-${id}`);
 
 		io.emit('remove-session', id);
 	});
@@ -303,6 +278,18 @@ io.on('connection', function(socket) {
 		console.log('Create session: ' + data.id);
 		createSession(data.id, data.description, data.webhookUrl);
 	});
+
+	socket.on('re-generate', function(data){
+		console.log('In Re-Generate QR');
+	});
+
+	socket.on('delete-qr', function(data){
+		console.log('In Re-Generate QR');
+		const savedSessions = getSessionsFile();
+		const sessionIndex = savedSessions.findIndex(sess => sess.id == id);
+		console.log('savedSessions delete QR : ', savedSessions);
+		console.log('sessionIndex : ', sessionIndex)
+	});
 });
 
 // Send message
@@ -324,7 +311,6 @@ app.post('/send-message', async (req, res) => {
 	}
 
 	const isRegisteredNumber = await client.isRegisteredUser(number);
-
 	if (!isRegisteredNumber) {
 		return res.status(422).json({
 			status: false,
@@ -343,6 +329,42 @@ app.post('/send-message', async (req, res) => {
 			response: err
 		});
 	});
+});
+
+// get list device from database
+app.post('/list-device', async (req, res) => {
+
+	getDataListDevice((err, result) => {
+
+		if (err) {
+			res.status(500).json({
+				status: false,
+				message: err.code,
+				results: []
+			});
+		}else{
+			const savedSessions = getSessionsFile();
+
+			// Matching status Ready
+			if (savedSessions.length > 0) {
+				result.forEach(data => {
+					savedSessions.forEach(dataScan => {
+						if (data.id === dataScan.id) {
+							data.ready = dataScan.ready;
+						}
+					})
+				});
+			}
+
+			res.status(200).json({
+				status: true,
+				message: "success",
+				results: result
+			});
+		}
+
+	});
+
 });
 
 // Check Status Online
@@ -406,6 +428,7 @@ app.post('/number-registered', async (req, res) => {
 
 });
 
+// add new device
 app.post('/add-device', async (req, res) => {
 	const description = req.body.description;
 	const webhookUrl = req.body.webhookUrl;
@@ -414,7 +437,6 @@ app.post('/add-device', async (req, res) => {
 
 	addNewDevice(description, vGenerateToken, webhookUrl, (err, result) => {
 		if (err) {
-			console.log('ERROR  : ', err);
 			res.status(500).json({
 				status: false, 
 				message: `Add new device FAILED! ${err.code}`
@@ -428,10 +450,10 @@ app.post('/add-device', async (req, res) => {
 	});
 });
 
+// View detail info by Token
 app.post('/detail-device', async (req, res) => {
 
 	var vToken = req.body.key;
-	console.log('vToken : ', vToken);
 
 	getDataDeviceByToken(vToken, (err, result) => {
 		if (err) {
@@ -457,6 +479,33 @@ app.post('/detail-device', async (req, res) => {
 			});
 		}
 	});
+});
+
+// logout session
+app.post('/logout', async (req, res) => {
+
+	var vToken = req.body.token;
+
+	const client = sessions.find(sess => sess.id == vToken)?.client;
+	if (!client) {
+		res.status(404).json({
+			status: false,
+			id: vToken, 
+			message: "Belum Scan QR!"
+		});
+	}else{
+		client.logout(vToken).then(response => {
+			res.status(200).json({
+				status: true,
+				response: response
+			});
+		}).catch(err => {
+			res.status(200).json({
+				status: true,
+				response: {message: 'Logout Successfully!'}
+			});
+		});
+	}
 });
 
 server.listen(port, hostname, function() {

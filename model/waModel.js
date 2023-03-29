@@ -30,6 +30,7 @@ function getDataListDevice(callback){
             callback(null, result);
 	});
 }
+
 function getDataDeviceByToken(pToken, callback){
 	sqlQuery = `select
                     wad_token as id,
