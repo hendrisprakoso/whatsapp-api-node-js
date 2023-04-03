@@ -3,6 +3,8 @@
 <head>
 	<title>Whatsapp API</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.1/dist/js/adminlte.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.1/dist/css/adminlte.min.css"> -->
   <!-- This parts is optional, just for improve the styles -->
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
 	<style>
@@ -83,15 +85,60 @@
 	  color: #666;
 	  font-size: 14px;
 	}
-	ul.logs li:first-child {
+	/* ul.logs li:first-child {
 	  color: green;
-	}
+	} */
 	.hide {
 	  display: none;
 	}
 	</style>
 </head>
 <body>
+
+	<div class="row" hidden>
+		<div class="col-lg-4 col-6">
+			<div class="small-box bg-info">
+				<div class="inner">
+					<h3>
+						dev01
+						<sup style="font-size: 12px" class="float-right badge badge-sm bg-success mt-2">Active</sup>
+					</h3>
+					<p>nk8hredxqpwsnyx7b66pefsi11tfzy5uccakqtmt</p>
+				</div>
+				<a href="#" class="small-box-footer">
+					More info <i class="fas fa-arrow-circle-right"></i>
+				</a>
+			</div>
+		</div>
+		<div class="col-lg-4 col-6">
+			<div class="small-box bg-info">
+				<div class="inner">
+					<h3>
+						dev01
+						<sup style="font-size: 12px" class="float-right badge badge-sm bg-warning mt-2">Scan QR</sup>
+					</h3>
+					<p>nk8hredxqpwsnyx7b66pefsi11tfzy5uccakqtmt</p>
+				</div>
+				<a href="#" class="small-box-footer">
+					More info <i class="fas fa-arrow-circle-right"></i>
+				</a>
+			</div>
+		</div>
+		<div class="col-lg-4 col-6">
+			<div class="small-box bg-info">
+				<div class="inner">
+					<h3>
+						dev01
+						<sup style="font-size: 12px" class="float-right badge badge-sm bg-success mt-2">Active</sup>
+					</h3>
+					<p>nk8hredxqpwsnyx7b66pefsi11tfzy5uccakqtmt</p>
+				</div>
+				<a href="#" class="small-box-footer">
+					More info <i class="fas fa-arrow-circle-right"></i>
+				</a>
+			</div>
+		</div>
+	</div>
 
 	<div id="app">
 		<h1>List Device</h1>
@@ -152,8 +199,11 @@
 							template.find('.link-redirect').attr('href', urlRedirect);
 							if (clientStatus) {
 								template.find('.logs').prepend($('<li>').text('Active'));
-							} else {
-								template.find('.logs').prepend($('<li>').text('Scan QR'));
+								template.find('.logs').attr('style', 'background-color:green; color:white;');
+							} else if(clientStatus == false) {
+								template.find('.logs').prepend($('<li>').text('Scan QR!'));
+							}else{
+								template.find('.logs').prepend($('<li>').text('Please generate QR code!'));
 							}
 
 

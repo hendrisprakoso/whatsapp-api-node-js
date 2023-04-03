@@ -108,6 +108,7 @@
 			<div class="client hide" style="margin-top:0px;">
 				<h4 class="title"></h4>
 				<p class="description"></p>
+				<p class="count-valid"></p>
 				<img src="" alt="QR Code" id="qrcode" style="width: 200px;">
 				<h4>Logs:</h4>
 				<ul class="logs"></ul>
@@ -132,8 +133,49 @@
 			return v_url_split[v_url_split.length-1];
 		}
 
+		function sleep(ms) {
+			return new Promise(resolve => setTimeout(resolve, ms));
+		}
+
+		async function startTimeCounter(pIdClient) {
+			var vGenerated = counterGenerateQr();
+			// console.log('vGenerated: ', vGenerated)
+			if (vGenerated == 2) {
+				for (let i = 60; i > 0; i--) {
+					// console.log(`Waiting ${i} seconds...`);
+					$(`.client-${pIdClient} .count-valid`).html(`Valid in (${i})s`);
+					await sleep(1000);
+				}
+			}
+		}
+
+		
+		
+		// function startTimeCounter(pIdClient) {
+		// 	var qrGenerated = counterGenerateQr();
+		// 	var startTime = new Date();
+		// 	var seconds;
+		// 	startTime.setTime(startTime.getTime() + 1000 * 60);
+		// 	var countInterval = setInterval(() => {
+		// 		stTime = Math.floor(startTime / 1000);
+		// 		var now = Math.floor(Date.now() / 1000); 
+
+		// 		var diff = stTime - now ; 
+		// 		var seconds = Math.floor(diff); 
+
+		// 		if (seconds > 0) {
+		// 			$(`.client-${pIdClient} .count-valid`).html(`Valid in (${seconds})s`);
+		// 		}
+		// 	}, 1000);
+
+		// 	if (seconds < 0) {
+		// 		clearInterval(countInterval);
+		// 	}
+		// }
+
 		$(document).ready(function() {
-			var socket = io();		
+			var socket = io();
+			var timer;	
 						
 			$('.add-client-btn').click(function() {
 				// Sett value ID 
@@ -183,11 +225,7 @@
 					});
 
 				} else {
-					let vConfirm = confirm('Anda ingin melakukan Generate ulang ?');
-					socket.emit('re-generate', {
-						id: v_id
-					});
-					location.reload();
+					alert('QR code has generated, Please wait!');
 				}
 
 			});
@@ -199,7 +237,7 @@
 					
 					// Checking agar QR yang di tampilan sesuai dengan Parameter Token
 					let v_param_token = getTokenDevice();
-					if (session.id === v_param_token) {
+					if (session.id === v_param_token && session.ready != null) {
 						var clientId = session.id;
 						var clientDescription = session.description;
 						var clientwebhook = session.webhookUrl;
@@ -222,29 +260,44 @@
 				}
 			});
 
-			socket.on('remove-session', function(id) {
-				$(`.client.client-${id}`).remove();
-				location.reload();
-			});
-
 			socket.on('message', function(data) {
+				console.log('data : ', data);
 				$(`.client.client-${data.id} .logs`).prepend($('<li>').text(data.text));
+				if (data.status === 'scan') {
+					$(`.client-${data.id} .count-valid`).removeAttr('hidden');
+					startTimeCounter(data.id);
+				}else{
+					$(`.client-${data.id} .count-valid`).attr('hidden', true);
+				}
 			});
 
 			socket.on('qr', function(data) {
 				$(`.client.client-${data.id} #qrcode`).attr('src', data.src);
 				$(`.client.client-${data.id} #qrcode`).show();
-				// $(`.client-logout-btn-${data.id}`).attr('hidden', true);
 			});
 
 			socket.on('ready', function(data) {
 				$(`.client.client-${data.id} #qrcode`).hide();
 				// $(`.client-logout-btn-${data.id}`).removeAttr('hidden');
+				if (data.status != 'scan') {
+					$(`.client-${data.id} .count-valid`).attr('hidden', true);
+				}else{
+					$(`.client-${data.id} .count-valid`).removeAttr('hidden');
+				}
 			});
 
 			socket.on('authenticated', function(data) {
 				$(`.client.client-${data.id} #qrcode`).hide();
 				// $(`.client-logout-btn-${data.id}`).attr('hidden', true);
+				if (data.status != 'scan') {
+					$(`.client-${data.id} .count-valid`).attr('hidden', true);
+				}else{
+					$(`.client-${data.id} .count-valid`).removeAttr('hidden');
+				}
+			});
+
+			socket.on('remove-session', function(id) {
+				$(`.client.client-${id}`).remove();				
 			});
 		
 		});

@@ -74,7 +74,7 @@ const createSessionsFileIfNotExists = function() {
 createSessionsFileIfNotExists();
 
 const setSessionsFile = function(sessions) {
-	fs.writeFile(SESSIONS_FILE, JSON.stringify(sessions), function(err) {
+	fs.writeFileSync(SESSIONS_FILE, JSON.stringify(sessions), function(err) {
 		if (err) {
 			console.log(err);
 		}
@@ -90,6 +90,7 @@ const createSession = function(id, description, webhookUrl) {
 
 	const client = new Client({
 		restartOnAuthFail: true,
+		qrMaxRetries: 1,
 		puppeteer: {
 			headless: true,
 			args: [
@@ -112,16 +113,17 @@ const createSession = function(id, description, webhookUrl) {
 	client.initialize();
 
 	client.on('qr', (qr) => {
-		console.log('QR RECEIVED', qr);
+		console.log(`QR RECEIVED ${description}: `, qr);
+
 		qrcode.toDataURL(qr, (err, url) => {
 			io.emit('qr', { id: id, src: url, small:true });
-			io.emit('message', { id: id, text: 'QR Code received, scan please!' });
+			io.emit('message', { id: id, status:'scan', text: 'QR Code received, scan please!' });
 		});
 	});
 
 	client.on('ready', () => {
 		io.emit('ready', { id: id });
-		io.emit('message', { id: id, text: 'Whatsapp is ready!' });
+		io.emit('message', { id: id, status:null, text: 'Whatsapp is ready!' });
 
 		const savedSessions = getSessionsFile();
 		const sessionIndex = savedSessions.findIndex(sess => sess.id == id);
@@ -159,11 +161,11 @@ const createSession = function(id, description, webhookUrl) {
 
 	client.on('authenticated', () => {
 		io.emit('authenticated', { id: id });
-		io.emit('message', { id: id, text: 'Whatsapp is authenticated!' });
+		io.emit('message', { id: id, status:null, status: 'auth', text: 'Whatsapp is authenticated!' });
 	});
 
 	client.on('auth_failure', function() {
-		io.emit('message', { id: id, text: 'Auth failure, restarting...' });
+		io.emit('message', { id: id, status:null, text: 'Auth failure, restarting...' });
 	});
 
 	// function untuk mendapatkan status message ke Client (Delivered/Read)
@@ -193,9 +195,10 @@ const createSession = function(id, description, webhookUrl) {
 	});
 
 	client.on('disconnected', (reason) => {
-		io.emit('message', { id: id, text: 'Whatsapp is disconnected!' });
+		console.log('in disconnected!');
+		io.emit('message', { id: id, status:null, text: 'Whatsapp is disconnected!' });
 		client.destroy();
-		client.initialize();
+		// client.initialize();
 
 		// Menghapus pada file sessions
 		const savedSessions = getSessionsFile();
@@ -203,9 +206,6 @@ const createSession = function(id, description, webhookUrl) {
 		// savedSessions[sessionIndex].ready = false;
 		savedSessions.splice(sessionIndex, 1);
 		setSessionsFile(savedSessions);
-
-		// Delete folder session
-		// rimraf.sync(`./.wwebjs_auth/session-${id}`);
 
 		io.emit('remove-session', id);
 	});
@@ -234,11 +234,11 @@ const createSession = function(id, description, webhookUrl) {
 		});
 		setSessionsFile(savedSessions);
 	}
-	else if (sessionIndex > -1){
-		savedSessions[sessionIndex].description = description;
-		savedSessions[sessionIndex].webhookUrl = webhookUrl;
-		setSessionsFile(savedSessions);
-	}
+	// else if (sessionIndex > -1){
+	// 	savedSessions[sessionIndex].description = description;
+	// 	savedSessions[sessionIndex].webhookUrl = webhookUrl;
+	// 	setSessionsFile(savedSessions);
+	// }
 }
 
 const init = function(socket) {
@@ -277,18 +277,6 @@ io.on('connection', function(socket) {
 	socket.on('create-session', function(data) {
 		console.log('Create session: ' + data.id);
 		createSession(data.id, data.description, data.webhookUrl);
-	});
-
-	socket.on('re-generate', function(data){
-		console.log('In Re-Generate QR');
-	});
-
-	socket.on('delete-qr', function(data){
-		console.log('In Re-Generate QR');
-		const savedSessions = getSessionsFile();
-		const sessionIndex = savedSessions.findIndex(sess => sess.id == id);
-		console.log('savedSessions delete QR : ', savedSessions);
-		console.log('sessionIndex : ', sessionIndex)
 	});
 });
 
@@ -378,7 +366,7 @@ app.post('/status-device', async (req, res) => {
 
 	if (sessionIndex == undefined) {
 		res.status(404).json({
-			status: true,
+			status: false,
 			message: "The sender DISCONNECTED!"
 		});
 	} else {
@@ -491,18 +479,23 @@ app.post('/logout', async (req, res) => {
 		res.status(404).json({
 			status: false,
 			id: vToken, 
-			message: "Belum Scan QR!"
+			message: "Scan QR!"
 		});
 	}else{
-		client.logout(vToken).then(response => {
+		await client.logout(vToken).then(resp => {
+			console.log(`(id : ${vToken}) Logout Success!`);
+
 			res.status(200).json({
 				status: true,
-				response: response
+				message: resp
 			});
+
 		}).catch(err => {
-			res.status(200).json({
-				status: true,
-				response: {message: 'Logout Successfully!'}
+			console.log(`(id : ${vToken}) Logout Failed!`);
+			console.log(`Logout Failed! : `, err);
+			res.status(500).json({
+				status: false,
+				message: err.Error
 			});
 		});
 	}
