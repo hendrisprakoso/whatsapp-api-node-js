@@ -7,7 +7,7 @@ const http = require('http');
 const fs = require('fs');
 // const rimraf = require("rimraf");
 const request = require('request');
-const { phoneNumberFormatter, makeIdToken } = require('./helpers/formatter');
+const { phoneNumberFormatter, makeIdToken, allowedFile, fileIsDocument } = require('./helpers/formatter');
 const fileUpload = require('express-fileupload');
 const axios = require('axios');
 
@@ -54,7 +54,6 @@ app.get('/list-device', (req, res) => {
 	res.sendFile('index-multiple-list-account.html', {
 		root: __dirname
 	});
-
 });
 
 const sessions = [];
@@ -93,6 +92,7 @@ const createSession = function(id, description, webhookUrl) {
 		qrMaxRetries: 1,
 		puppeteer: {
 			headless: true,
+			executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
 			args: [
 				'--no-sandbox',
 				'--disable-setuid-sandbox',
@@ -100,9 +100,22 @@ const createSession = function(id, description, webhookUrl) {
 				'--disable-accelerated-2d-canvas',
 				'--no-first-run',
 				'--no-zygote',
-				'--single-process', // <- this one doesn't works in Windows
+				'--single-process', 
 				'--disable-gpu',
-				'--unhandled-rejections=strict'
+				'--unhandled-rejections=strict',
+				'--log-level=3', // new add puppeteer
+				'--start-maximized',
+				'--no-default-browser-check',
+				'--disable-infobars', 
+				'--disable-web-security',
+				'--disable-site-isolation-trials',
+				'--no-experiments',
+				'--ignore-gpu-blacklist',
+				'--ignore-certificate-errors',
+				'--ignore-certificate-errors-spki-list',
+				'--disable-extensions',
+				'--disable-default-apps',
+				'--enable-features=NetworkService'
 			],
 		},
 		authStrategy: new LocalAuth({
@@ -131,34 +144,6 @@ const createSession = function(id, description, webhookUrl) {
 		setSessionsFile(savedSessions);
 	});
 
-	// Function ketika Client Reply Message
-	client.on('message', msg => {
-		if (msg.body == '!ping') {
-			msg.reply('pong');
-		} else {
-			console.log('=============== PUSH KE WEBHOOK (REPLY) ================');
-			console.log('webhookUrl : ', webhookUrl);
-			request.post({
-				url:     webhookUrl,
-				body : {
-					id 			: msg.id.id,
-					pushName 	: msg._data.notifyName, 
-					fromMe 		: msg.fromMe,
-					from 		: msg.from,
-					to 			: msg.to,
-					body 		: msg.body,
-					timestamp 	: msg.timestamp,
-					type 		: "message"
-				},
-				json: true
-			}, function(error, response, body){
-				console.log('error post : ', error);
-				console.log('body post : ', body);
-			});
-			console.log('================================================');
-		} 
-	});
-
 	client.on('authenticated', () => {
 		io.emit('authenticated', { id: id });
 		io.emit('message', { id: id, status:null, status: 'auth', text: 'Whatsapp is authenticated!' });
@@ -168,7 +153,26 @@ const createSession = function(id, description, webhookUrl) {
 		io.emit('message', { id: id, status:null, text: 'Auth failure, restarting...' });
 	});
 
-	// function untuk mendapatkan status message ke Client (Delivered/Read)
+	client.on('disconnected', (reason) => {
+		console.log('in disconnected!');
+		io.emit('message', { id: id, status:null, text: 'Whatsapp is disconnected!' });
+		client.destroy();
+		// client.initialize();
+
+		// Menghapus pada file sessions
+		const savedSessions = getSessionsFile();
+		const sessionIndex = savedSessions.findIndex(sess => sess.id == id);
+		// savedSessions[sessionIndex].ready = false;
+		savedSessions.splice(sessionIndex, 1);
+		setSessionsFile(savedSessions);
+
+		io.emit('remove-session', id);
+	});
+
+	/*
+		MESSAGE_ACK -> untuk mengetahui status message yang dikirimkan yang nantinya akan di push ke datbase dengan bantuan webhook 
+		MESSAGE -> untuk mengetahui balasan dari message yang telah dikirimkan yang nantinya juga akan di push ke datbase dengan bantuan webhook 
+	*/
 	client.on('message_ack', async (msg) => {	
 		console.log('=============== PUSH KE WEBHOOK ================');
 		console.log('webhookUrl : ', webhookUrl);
@@ -194,23 +198,46 @@ const createSession = function(id, description, webhookUrl) {
 
 	});
 
-	client.on('disconnected', (reason) => {
-		console.log('in disconnected!');
-		io.emit('message', { id: id, status:null, text: 'Whatsapp is disconnected!' });
-		client.destroy();
-		// client.initialize();
-
-		// Menghapus pada file sessions
-		const savedSessions = getSessionsFile();
-		const sessionIndex = savedSessions.findIndex(sess => sess.id == id);
-		// savedSessions[sessionIndex].ready = false;
-		savedSessions.splice(sessionIndex, 1);
-		setSessionsFile(savedSessions);
-
-		io.emit('remove-session', id);
+	client.on('message', msg => {
+		if (msg.body == '!ping') {
+			msg.reply('pong');
+		} else {
+			console.log("response Message Reply : ", msg);
+			console.log('=============== PUSH KE WEBHOOK (REPLY) ================');
+			console.log('webhookUrl : ', webhookUrl);
+			request.post({
+				url:     webhookUrl,
+				body : {
+					id 			: msg.id.id,
+					pushName 	: msg._data.notifyName, 
+					fromMe 		: msg.fromMe,
+					from 		: msg.from,
+					to 			: msg.to,
+					body 		: msg.body,
+					timestamp 	: msg.timestamp,
+					type 		: "message"
+				},
+				json: true
+			}, function(error, response, body){
+				console.log('error post : ', error);
+				console.log('body post : ', body);
+			});
+			console.log('================================================');
+		} 
 	});
 
-	// Tambahkan client ke sessions
+	
+
+	/*
+		Proses Pengecekan dan penambahan ke session 
+		Jika session sudah pernah di tambahkan makan akan di replace dengan cara 
+		Di hapus terlebih dahulu kemudian di tambahakan ke list sessions,
+		-1 = menandakan data tersebut belum ada di list session
+	*/
+	const indexSessions = sessions.findIndex(sess => sess.id == id);
+	if (indexSessions > -1) {
+		sessions.splice(indexSessions, 1);	
+	}
 	sessions.push({
 		id: id,
 		description: description,
@@ -218,12 +245,10 @@ const createSession = function(id, description, webhookUrl) {
 		client: client
 	});
 
-	// Menambahkan session ke file
+	/* Menambahkan session ke file */
 	const savedSessions = getSessionsFile();
 	console.log('savedSessions in Create Session : ', savedSessions);
 	const sessionIndex = savedSessions.findIndex(sess => sess.id == id);
-
-	// console.log('sessionIndex : ', sessionIndex);
 
 	if (sessionIndex == -1) {
 		savedSessions.push({
@@ -234,11 +259,6 @@ const createSession = function(id, description, webhookUrl) {
 		});
 		setSessionsFile(savedSessions);
 	}
-	// else if (sessionIndex > -1){
-	// 	savedSessions[sessionIndex].description = description;
-	// 	savedSessions[sessionIndex].webhookUrl = webhookUrl;
-	// 	setSessionsFile(savedSessions);
-	// }
 }
 
 const init = function(socket) {
@@ -280,7 +300,12 @@ io.on('connection', function(socket) {
 	});
 });
 
-// Send message
+
+/*
+	List Router/Endpoint untuk API 
+*/
+
+/* Send message */
 app.post('/send-message', async (req, res) => {
 	console.log(req);
 
@@ -319,7 +344,86 @@ app.post('/send-message', async (req, res) => {
 	});
 });
 
-// get list device from database
+/* Send Message with Image */
+app.post('/send-msg-attachment', async (req, res) => {
+
+	const sender = req.body.token;
+	const number = phoneNumberFormatter(req.body.number);
+	const vMessage = req.body.message;
+	const fileUpload = req.files.file;
+	const fileUploadIsDocument = fileIsDocument(fileUpload.name);
+
+	// Validation for file upload extention
+	if (allowedFile(fileUpload.name) === false) {
+		return res.status(422).json({
+			status: false,
+			message: `Your file format is not Allowed! (${fileUpload.name})`
+		});
+	}
+
+	const objMedia = new MessageMedia(fileUpload.mimetype, fileUpload.data.toString('base64'), fileUpload.name);
+
+	// Inititalitation client/device/account
+	const client = sessions.find(sess => sess.id == sender)?.client;
+
+	// Validation Device is exists & ready
+	if (!client) {
+		return res.status(422).json({
+			status: false,
+			message: `The sender: ${sender} is not found!`
+		})
+	}
+	
+	// Validation number receipt is registered
+	const isRegisteredNumber = await client.isRegisteredUser(number);
+	if (!isRegisteredNumber) {
+		return res.status(422).json({
+			status: false,
+			message: 'The number is not registered'
+		});
+	}
+
+	/*
+		Sebelum melaukan proses send message dengan attachment file 
+		Sistem ada malakukan pegecekan fileupload apakah itu document (txt, pdf, xls, etc) atau media lain (jpg, jpeg, png, dll)
+		Jika type fileupload adalah document makan sistem melakukan proses 2x kirim pesan
+			- Pertama mengirimkan pesan untuk text (caption)
+		Jika type fileupload adalah image/video maka sistem dapat langsung 1x kirim dengan menambahkan parameter { caption : <caption_message> }
+
+		*
+		Kenapa kalau file document harus 2x kirim ? 
+		Karena dari library belum bisa memberikan caption ketika ada attachment document, 
+		saat ini masih menunggu update dari library Whatsap-web.js
+
+	*/
+
+	if (fileUploadIsDocument) {
+
+		await client.sendMessage(number, vMessage).catch(err => {
+			res.status(500).json({
+				status: false,
+				response: err
+			});
+		});
+
+	}
+
+	client.sendMessage(number, objMedia, { sendMediaAsDocument : fileUploadIsDocument, caption : vMessage }).then(response => {
+		res.status(200).json({
+			status: true,
+			response: response
+		});
+	}).catch(err => {
+		console.log('ERROR : ', err);
+		res.status(500).json({
+			status: false,
+			response: err
+		});
+	});
+	
+});
+
+/* get list device from database */
 app.post('/list-device', async (req, res) => {
 
 	getDataListDevice((err, result) => {
@@ -355,7 +459,7 @@ app.post('/list-device', async (req, res) => {
 
 });
 
-// Check Status Online
+/* Check Status Online */
 app.post('/status-device', async (req, res) => {
 
 	const sender = req.body.sender;
@@ -367,24 +471,50 @@ app.post('/status-device', async (req, res) => {
 	if (sessionIndex == undefined) {
 		res.status(404).json({
 			status: false,
-			message: "The sender DISCONNECTED!"
+			message: "Device DISCONNECTED!"
 		});
 	} else {
 		if (sessionIndex.ready) {
-			res.status(200).json({
-				status: true,
-				message: "The sender is Ready (CONNECTED)!"
-			});
+
+			// Inititalitation client/device/account
+			const client = sessions.find(sess => sess.id == sender)?.client;
+
+			// Validation Device is exists & ready
+			if (!client) {
+				return res.status(422).json({
+					status: false,
+					message: `Device: ${sender} is not found!`
+				})
+			}
+			
+			// Checking for client info 
+			let info = client.info;
+			if (info == undefined) {
+				res.status(200).json({
+					status: false,
+					message: "Device Connecting.."
+				});	
+			}else{
+				res.status(200).json({
+					status: true,
+					message: "Device is Ready (CONNECTED)!",
+					result:{
+						name : info.pushname,
+						user : info.wid.user,
+						platform : info.platform
+					}
+				});
+			}
 		} else {
 			res.status(422).json({
 				status: false,
-				message: "The sender is not Already! plase scan again."
+				message: "Device is not Already! plase scan again."
 			});
 		}
 	}
 });
 
-// Check number is Registered
+/* Check number is Registered */
 app.post('/number-registered', async (req, res) => {
 
 	const sender = req.body.sender;
@@ -416,7 +546,7 @@ app.post('/number-registered', async (req, res) => {
 
 });
 
-// add new device
+/* add new device */
 app.post('/add-device', async (req, res) => {
 	const description = req.body.description;
 	const webhookUrl = req.body.webhookUrl;
@@ -438,7 +568,7 @@ app.post('/add-device', async (req, res) => {
 	});
 });
 
-// View detail info by Token
+/* View detail info by Token */
 app.post('/detail-device', async (req, res) => {
 
 	var vToken = req.body.key;
@@ -469,7 +599,7 @@ app.post('/detail-device', async (req, res) => {
 	});
 });
 
-// logout session
+/* logout session */
 app.post('/logout', async (req, res) => {
 
 	var vToken = req.body.token;
@@ -482,12 +612,11 @@ app.post('/logout', async (req, res) => {
 			message: "Scan QR!"
 		});
 	}else{
-		await client.logout(vToken).then(resp => {
+		client.logout(vToken).then(resp => {
 			console.log(`(id : ${vToken}) Logout Success!`);
-
 			res.status(200).json({
 				status: true,
-				message: resp
+				message: "Device Logout Successfully!"
 			});
 
 		}).catch(err => {
@@ -495,7 +624,7 @@ app.post('/logout', async (req, res) => {
 			console.log(`Logout Failed! : `, err);
 			res.status(500).json({
 				status: false,
-				message: err.Error
+				message: err
 			});
 		});
 	}
