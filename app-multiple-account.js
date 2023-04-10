@@ -226,8 +226,6 @@ const createSession = function(id, description, webhookUrl) {
 		} 
 	});
 
-	
-
 	/*
 		Proses Pengecekan dan penambahan ke session 
 		Jika session sudah pernah di tambahkan makan akan di replace dengan cara 
